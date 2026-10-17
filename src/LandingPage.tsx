@@ -9,7 +9,9 @@ import './landing.css';
 gsap.registerPlugin(ScrollTrigger);
 
 const poster = '/aerotrace-takeoff-poster.jpg';
-const videoUrl = '/aerotrace-takeoff.mp4';
+const videoUrl = typeof window !== 'undefined' && window.matchMedia('(max-width: 760px)').matches
+  ? '/aerotrace-takeoff-mobile.mp4'
+  : '/aerotrace-takeoff-optimized.mp4';
 
 const features = [
   { icon: RadioTower, label: '01 / LIVE AIRSPACE', title: 'See the sky as it moves.', text: 'Explore live aircraft activity across India with a map that follows your view.' },
@@ -28,23 +30,33 @@ export default function LandingPage() {
     if (reducedMotion || !heroRef.current) return;
 
     let progress = 0;
-    let raf = 0;
+    let seekFrame = 0;
     let lastUiHidden = false;
     const video = videoRef.current;
     const hero = heroRef.current;
     const heroUi = heroUiRef.current;
 
     const seek = () => {
-      raf = 0;
+      seekFrame = 0;
       if (!video || video.readyState < HTMLMediaElement.HAVE_METADATA || !Number.isFinite(video.duration)) return;
+      // Let the in-flight decode finish; seeked will apply only the newest scroll target.
+      if (video.seeking) return;
       const time = mediaTimeForProgress(progress, video.duration);
       if (shouldSeek(video.currentTime, time)) {
         try { video.currentTime = time; } catch { /* Keep the poster visible if the browser cannot seek yet. */ }
       }
     };
-    const onMetadata = () => seek();
+    const scheduleSeek = () => {
+      if (!seekFrame) seekFrame = window.requestAnimationFrame(seek);
+    };
+    const onMetadata = () => scheduleSeek();
+    const onSeeked = () => {
+      if (!video || !Number.isFinite(video.duration)) return;
+      if (shouldSeek(video.currentTime, mediaTimeForProgress(progress, video.duration))) scheduleSeek();
+    };
     video?.addEventListener('loadedmetadata', onMetadata);
     video?.addEventListener('durationchange', onMetadata);
+    video?.addEventListener('seeked', onSeeked);
 
     const lenis = new Lenis({ lerp: 0.07, smoothWheel: true, syncTouch: false });
     const syncScroll = () => ScrollTrigger.update();
@@ -60,7 +72,7 @@ export default function LandingPage() {
       ease: 'none',
       onUpdate: () => {
         progress = playhead.progress;
-        if (!raf) raf = window.requestAnimationFrame(seek);
+        scheduleSeek();
         const hidden = shouldHideHeroInterface(progress);
         if (hidden !== lastUiHidden && heroUi) {
           lastUiHidden = hidden;
@@ -77,11 +89,11 @@ export default function LandingPage() {
         invalidateOnRefresh: true,
       },
     });
-    if (video?.readyState && video.readyState >= HTMLMediaElement.HAVE_METADATA) seek();
+    if (video?.readyState && video.readyState >= HTMLMediaElement.HAVE_METADATA) scheduleSeek();
     ScrollTrigger.refresh();
 
     return () => {
-      if (raf) window.cancelAnimationFrame(raf);
+      if (seekFrame) window.cancelAnimationFrame(seekFrame);
       scrubTween.scrollTrigger?.kill();
       scrubTween.kill();
       lenis.off('scroll', syncScroll);
@@ -90,6 +102,7 @@ export default function LandingPage() {
       gsap.ticker.lagSmoothing(500, 33);
       video?.removeEventListener('loadedmetadata', onMetadata);
       video?.removeEventListener('durationchange', onMetadata);
+      video?.removeEventListener('seeked', onSeeked);
     };
   }, []);
 
