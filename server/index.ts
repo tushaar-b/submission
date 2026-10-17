@@ -11,6 +11,15 @@ const retryState = new Map<string, { count: number; until: number }>();
 const TTL = 60_000;
 let nextGlobalRequestAt = 0;
 function diagnosticLog(stage:string,details:Record<string,unknown>){if(process.env.AEROTRACE_DIAGNOSTICS==='1')console.info(`[AEROTRACE diagnostics] ${stage} ${JSON.stringify(details)}`);}
+async function fetchOpenSky(url:string,init:RequestInit,phase:'token'|'states'){
+  try{return await fetch(url,init);}
+  catch(error){
+    const failure=error as Error&{cause?:Error&{code?:unknown}};
+    const causeCode=typeof failure.cause?.code==='string'?failure.cause.code:null;
+    console.error('[AEROTRACE] OpenSky transport failure',{phase,errorName:failure.name,causeCode});
+    throw new Error(`OpenSky ${phase} request failed${causeCode?` (${causeCode})`:''}`,{cause:error});
+  }
+}
 
 type Snapshot = { source:'live'|'cache'; status:string; fetchedAt:string; upstreamTime:number|null; stale:boolean; nextRefreshAllowedAt:string|null; region:{id:string;label:string;bbox:number[];center:number[];zoom:number}; aircraft:Aircraft[]; error?:string };
 
@@ -19,7 +28,7 @@ async function accessToken(){
   if(!process.env.OPENSKY_CLIENT_ID||!process.env.OPENSKY_CLIENT_SECRET)return null;
   if(token&&token.expires>Date.now()+30_000)return token.value;
   const form=new URLSearchParams({grant_type:'client_credentials',client_id:process.env.OPENSKY_CLIENT_ID,client_secret:process.env.OPENSKY_CLIENT_SECRET});
-  const response=await fetch('https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:form,signal:AbortSignal.timeout(8_000)});
+  const response=await fetchOpenSky('https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:form,signal:AbortSignal.timeout(8_000)},'token');
   if(!response.ok)throw new Error(`OpenSky token error ${response.status}`);
   const body=await response.json() as {access_token:string;expires_in:number};token={value:body.access_token,expires:Date.now()+body.expires_in*1000};return token.value;
 }
@@ -34,9 +43,9 @@ async function request(bbox:[number,number,number,number]|null, key:string, icao
     let auth=await accessToken();
     const params=new URLSearchParams();if(bbox){params.set('lamin',String(south));params.set('lomin',String(west));params.set('lamax',String(north));params.set('lomax',String(east));}if(icao24)params.set('icao24',icao24);
     const url=`https://opensky-network.org/api/states/all?${params.toString()}`;
-    let response=await fetch(url,{headers:auth?{Authorization:`Bearer ${auth}`}: {},signal:AbortSignal.timeout(15_000)});
+    let response=await fetchOpenSky(url,{headers:auth?{Authorization:`Bearer ${auth}`}: {},signal:AbortSignal.timeout(15_000)},'states');
     diagnosticLog('upstream_response',{key,status:response.status,httpDate:response.headers.get('date'),retryAfter:response.headers.get('retry-after'),rateLimitRemaining:response.headers.get('x-rate-limit-remaining')});
-    if(response.status===401&&auth){token=null;auth=await accessToken();response=await fetch(url,{headers:{Authorization:`Bearer ${auth}`},signal:AbortSignal.timeout(15_000)});}
+    if(response.status===401&&auth){token=null;auth=await accessToken();response=await fetchOpenSky(url,{headers:{Authorization:`Bearer ${auth}`},signal:AbortSignal.timeout(15_000)},'states');}
     if(!response.ok){
       const delay=retryAfterSeconds(response.headers.get('x-rate-limit-retry-after-seconds'),response.headers.get('retry-after'));
       const count=(retryState.get(key)?.count||0)+1,backoff=response.status===429?delay:exponentialBackoffMs(count);
