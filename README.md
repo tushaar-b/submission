@@ -1,6 +1,18 @@
 # AEROTRACE — Airspace Intelligence
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Open%20AEROTRACE-0ea5e9?logo=vercel&logoColor=white)](https://submission-tan.vercel.app/)
+
 A responsive India-wide aircraft monitoring dashboard using OpenSky Network state vectors and CARTO Dark Matter raster tiles. The browser calls a same-origin API proxy; optional OpenSky OAuth credentials stay on the server.
+
+## Live Deployment
+
+**AEROTRACE is live!**
+
+🌐 **[Explore AEROTRACE — Live Website](https://submission-tan.vercel.app/)**
+
+Experience the cinematic landing page and launch the live aircraft tracking dashboard directly from the website.
+
+The application is hosted on Vercel, with serverless API handlers for backend requests. This describes the deployment architecture and does not imply that every feature has been independently verified in production.
 
 ## Run locally
 
@@ -64,17 +76,16 @@ Tests cover filters, trails, India viewport clipping/zoom eligibility, outward b
 
 ## Deploy to Vercel
 
-The project includes `vercel.json` and serverless Express handlers at `api/aircraft.ts` and `api/health.ts`. It is deployment-ready, but deployment is not complete until a public URL is deployed and verified.
+The production site is hosted at [https://submission-tan.vercel.app/](https://submission-tan.vercel.app/). Vercel serves backend requests through Node serverless handlers at `api/aircraft.ts` and `api/health.ts`; the browser uses same-origin `/api` paths.
 
-1. Push this repository's `main` branch to GitHub.
-2. In Vercel, choose **Add New → Project**, import the `submission` repository, and select the `main` production branch.
-3. Keep the project root directory at the repository root. Use the detected Vite settings or confirm Build Command `npm run build`, Output Directory `dist`, and Install Command `npm install`.
-4. In **Project Settings → Environment Variables**, add `VITE_CARTO_API_KEY` with the CARTO key for **Production** and **Preview** (and Development if using Vercel's local environment pull). This `VITE_` value is public and is embedded during the build.
-5. Optionally add `OPENSKY_CLIENT_ID` and `OPENSKY_CLIENT_SECRET` for **Production** and **Preview**. These values are read only by the server-side proxy; never prefix them with `VITE_`.
-6. Save the variables, then deploy `main` from the Vercel Deployments page. Environment variable changes require a new deployment.
-7. Open the resulting `https://…vercel.app` URL. Confirm the CARTO Dark Matter tiles load with attribution and no key-required watermark. The map starts over Delhi; pan or zoom to another compact Indian viewport and verify the aircraft list/map updates after the 700 ms debounce.
-8. Verify `https://…vercel.app/api/health` returns `{ "ok": true, "service": "AEROTRACE API" }` and `https://…vercel.app/api/aircraft?bbox=27,76,29,79` returns a JSON snapshot with `source: "live"` (or a clearly labeled cached/degraded status when OpenSky is temporarily unavailable). Confirm an outside-India or invalid bbox returns HTTP 400.
-9. In browser developer tools, check that API requests use the deployed host and that CARTO raster requests include the configured `key` query parameter. The frontend uses relative `/api` paths; it does not target localhost in production.
+1. In Vercel, import the `submission` repository and select the `main` production branch (or keep the existing project connected to that branch).
+2. Keep the project root directory at the repository root. Use the detected Vite settings or confirm Build Command `npm run build`, Output Directory `dist`, and Install Command `npm install`.
+3. In **Project Settings → Environment Variables**, add `VITE_CARTO_API_KEY` with the CARTO key for **Production** and **Preview** (and Development if using Vercel's local environment pull). This `VITE_` value is public and is embedded during the build.
+4. Optionally add `OPENSKY_CLIENT_ID` and `OPENSKY_CLIENT_SECRET` for **Production** and **Preview**. These values are read only by the server-side proxy; never prefix them with `VITE_`.
+5. Save the variables, then deploy `main` from the Vercel Deployments page. Environment variable changes require a new deployment.
+6. For deployment verification, open the production URL and check the CARTO Dark Matter tiles and attribution, then pan or zoom to another compact Indian viewport and observe whether aircraft update after the 700 ms debounce.
+7. Check `/api/health` for `{ "ok": true, "service": "AEROTRACE API" }` and `/api/aircraft?bbox=27,76,29,79` for a JSON response. OpenSky may return live data or a clearly labeled cached/degraded status when temporarily unavailable. An outside-India or invalid bbox should return HTTP 400.
+8. In browser developer tools, inspect that API requests use the deployed host and CARTO raster requests include the configured `key` query parameter. The frontend uses relative `/api` paths and does not target localhost in production.
 
 ## Known limits
 
