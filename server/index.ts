@@ -1,9 +1,9 @@
 import { exponentialBackoffMs, retryAfterSeconds } from './resilience';
 import express from 'express';
+import { parseIndiaBbox } from './india';
 
 export const app = express();
 const port = Number(process.env.PORT || 3001);
-const INDIA = { south: 6.4, west: 68.1, north: 35.7, east: 97.5 };
 const cache = new Map<string, Snapshot>();
 const inflight = new Map<string, Promise<Snapshot>>();
 const retryState = new Map<string, { count: number; until: number }>();
@@ -23,15 +23,6 @@ export function parseStates(body:unknown):{time:number|null;aircraft:Aircraft[]}
     return[{icao24:row[0].toLowerCase(),callsign:typeof row[1]==='string'?row[1].trim()||null:null,originCountry:typeof row[2]==='string'?row[2]:null,timePosition:num(row[3]),lastContact:num(row[4]),longitude:lon!==null&&lon>=-180&&lon<=180?lon:null,latitude:lat!==null&&lat>=-90&&lat<=90?lat:null,altitudeMeters:num(row[7]),onGround:typeof row[8]==='boolean'?row[8]:null,velocityMetersPerSecond:num(row[9]),headingDegrees:num(row[10]),verticalRateMetersPerSecond:num(row[11]),geoAltitudeMeters:num(row[13]),category:num(row[17])}];
   });
   return{time:num(b?.time),aircraft};
-}
-
-function parseBbox(value:unknown):[number,number,number,number]|null{
-  if(typeof value!=='string')return null;
-  const values=value.split(',').map(Number);
-  if(values.length!==4||values.some(v=>!Number.isFinite(v)))return null;
-  const [south,west,north,east]=values;
-  if(south<INDIA.south||west<INDIA.west||north>INDIA.north||east>INDIA.east||south>=north||west>=east||north-south>10||east-west>10)return null;
-  return[ south,west,north,east ];
 }
 
 let token:{value:string;expires:number}|null=null;
@@ -76,8 +67,8 @@ async function request(bbox:[number,number,number,number], key:string):Promise<S
 }
 
 app.get('/api/aircraft',async(req,res)=>{
-  const bbox=parseBbox(req.query.bbox);
-  if(!bbox)return res.status(400).json({error:'Provide a valid, sufficiently zoomed India viewport bbox=south,west,north,east'});
+  const bbox=parseIndiaBbox(req.query.bbox);
+  if(!bbox)return res.status(400).json({source:'offline',status:'invalid_request',error:'Provide a valid, sufficiently zoomed India viewport bbox=south,west,north,east',retryAfterSeconds:null,region:null,aircraft:[]});
   const key=`india:${bbox.join(',')}`;
   try{res.json(await(inflight.get(key)||request(bbox,key)));}
   catch(error){const err=error as Error&{status?:number;retryAfterSeconds?:number};if(err.retryAfterSeconds)res.setHeader('Retry-After',String(err.retryAfterSeconds));res.status(err.status||502).json({source:'offline',status:err.status===429?'rate_limited':'upstream_error',error:err.message,retryAfterSeconds:err.retryAfterSeconds||null,region:{id:key,bbox},aircraft:[]});}

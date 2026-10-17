@@ -13,7 +13,7 @@ cp .env.example .env
 npm run dev
 ```
 
-The dashboard is at `http://localhost:5173`; the Express proxy listens on `http://localhost:3001`. Anonymous OpenSky requests need no credentials. Optional credentials are `OPENSKY_CLIENT_ID` and `OPENSKY_CLIENT_SECRET`.
+The dashboard is at `http://localhost:5173`; the Express proxy listens on `http://localhost:3001`. Use `npm run dev` to start both services together. Running Vite alone does not start the API and returns a descriptive JSON 502 from the local proxy. Anonymous OpenSky requests need no credentials. Optional credentials are `OPENSKY_CLIENT_ID` and `OPENSKY_CLIENT_SECRET`.
 
 ## Environment variables
 
