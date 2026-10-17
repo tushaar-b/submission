@@ -10,6 +10,7 @@
     "server/index.ts",
     "server/india.ts",
     "server/resilience.ts",
+    "server/opensky-auth.ts",
     "server/states.ts"
   ]
 }
