@@ -54,7 +54,7 @@ npm test
 npm run lint
 ```
 
-Tests cover filters, trails, India viewport clipping/zoom eligibility, search normalization, freshness/error parsing, bounded search partitions, individual overlapping markers at actual coordinates, geodesic prediction and its cap, replay stepping, alerts, status labeling, history pruning, retry headers, and exponential backoff.
+Tests cover filters, trails, India viewport clipping/zoom eligibility, callsign/ICAO search normalization and error handling, bounded search partitions, individual overlapping markers at actual coordinates, geodesic prediction and its cap, replay stepping, alerts, status labeling, history pruning, retry headers, exponential backoff, and search input focus, character threshold, paste/backspace, cancellation, and error-boundary behavior in jsdom.
 
 ## Deploy to Vercel
 
