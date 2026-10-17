@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { indiaSearchPartitions, parseIndiaBbox, validSearchQuery } from './india';
+import { callsignSearchVariants, indiaSearchPartitions, parseIndiaBbox, validSearchQuery } from './india';
 
 describe('India discovery partitioning', () => {
   it('covers India with bounded cells suitable for deliberate searches', () => {
@@ -12,6 +12,10 @@ describe('India discovery partitioning', () => {
     expect(validSearchQuery('ai 123')).toEqual({query:'AI123',kind:'callsign'});
     expect(validSearchQuery('x')).toBeNull();
     expect(validSearchQuery('!@#')).toBeNull();
+  });
+  it('matches Air India IATA flight numbers against possible ICAO callsigns',()=>{
+    expect(callsignSearchVariants('AI 2483')).toEqual(['AI2483','AIC2483']);
+    expect(callsignSearchVariants('AIC2483')).toEqual(['AIC2483','AI2483']);
   });
   it('keeps regional bbox validation separate from search cells', () => {
     expect(parseIndiaBbox('27,76,29,79')).toEqual([27,76,29,79]);

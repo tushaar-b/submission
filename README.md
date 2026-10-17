@@ -13,7 +13,7 @@ cp .env.example .env
 npm run dev
 ```
 
-The dashboard is at `http://localhost:5173`; the Express proxy listens on `http://localhost:3001`. Use `npm run dev` to start both services together. Running Vite alone does not start the API and returns a descriptive JSON 502 from the local proxy. Anonymous OpenSky requests need no credentials. Optional credentials are `OPENSKY_CLIENT_ID` and `OPENSKY_CLIENT_SECRET`.
+The landing page is at `http://localhost:5173/` and the dashboard is at `http://localhost:5173/dashboard`; the Express proxy listens on `http://localhost:3001`. Use `npm run dev` to start both services together. Running Vite alone does not start the API and returns a descriptive JSON 502 from the local proxy. Anonymous OpenSky requests need no credentials. Optional credentials are `OPENSKY_CLIENT_ID` and `OPENSKY_CLIENT_SECRET`.
 
 ## Environment variables
 
@@ -27,6 +27,9 @@ The dashboard is at `http://localhost:5173`; the Express proxy listens on `http:
 `.env` is ignored by Git. The CARTO key is a browser-visible tile key; protect OpenSky credentials as server secrets.
 
 ## Features
+
+- A cinematic landing page at `/` uses the supplied golden-hour takeoff footage. Scroll pins the hero for roughly 350vh and scrubs the muted video forward or backward; the source is preserved at `public/aerotrace-takeoff-original.mp4`, alongside a seek-optimized browser copy and opening-frame poster. The baked-in ending remains unobstructed. Reduced-motion preferences use the static poster. Launch Radar and Enter Live Radar open `/dashboard`.
+- The existing three-column aircraft dashboard is available at `/dashboard` and retains its CARTO Dark Matter map and live tracking tools.
 
 - The map opens over Delhi, and its current Leaflet viewport is the single source of bounds for live monitoring. Pan or zoom freely; after a 700 ms quiet period the dashboard requests aircraft within the visible bounds, clipped to India's approximate 6.4–35.7° N and 68.1–97.5° E coverage envelope. Bounds are rounded outward to quarter-degree cache cells so visible edge aircraft are not omitted. Views outside India, zoomed out below level 6, wider than 10 degrees, or above the bounded query area display a zoom-in prompt instead of requesting an overly broad OpenSky query.
 - The endpoint accepts `GET /api/aircraft?bbox=south,west,north,east`. Bounds must be valid, within India, and no wider than 10° in either dimension. Invalid or overly broad queries return HTTP 400. `GET /api/health` reports proxy health.
@@ -44,6 +47,10 @@ The dashboard is at `http://localhost:5173`; the Express proxy listens on `http:
 ## API and recovery behavior
 
 The Express proxy and Vercel Node function share the same implementation. Active-viewport snapshots and in-flight requests are cached/deduplicated by normalized viewport bbox for 60 seconds. Nationwide callsign search checks cached observations first, then allows one explicitly requested geographic partition per search action (36 bounded partitions cover approximate India); results state how many sectors were checked and never claim exhaustive coverage. ICAO24 lookup asks OpenSky for the identifier directly. Uncached upstream calls have a global minimum 10-second gap per process; OpenSky `Retry-After` / rate-limit headers are honored and transient failures use exponential backoff up to five minutes. A prior successful snapshot for that viewport is returned with a degraded status when possible. Serverless instances can have separate memory and cold starts, so process-local caching is best effort, not a global quota guarantee.
+
+### Development diagnostics
+
+Set `AEROTRACE_DIAGNOSTICS=1` in the server environment and `VITE_AEROTRACE_DIAGNOSTICS=true` in the browser environment, then restart both development processes. Server logs report upstream status, cache/deduplication, raw versus normalized OpenSky state counts, and coordinate validity. The browser console reports current viewport bounds and counts that are outside the viewport, missing coordinates, rejected by filters, eligible, and rendered. These diagnostics intentionally omit API credentials, callsigns, and aircraft identifiers. Leave both flags disabled in normal production operation.
 
 ## Checks
 
@@ -72,6 +79,8 @@ The project includes `vercel.json` and serverless Express handlers at `api/aircr
 ## Known limits
 
 - OpenSky coverage, anonymous quota, availability, and refresh rate are controlled upstream. Callsign discovery checks one partition per explicit action and can miss aircraft until more sectors are searched; OpenSky does not provide an exhaustive India-wide callsign index. Exact ICAO24 searches are also limited to OpenSky current-state availability.
+- OpenSky state vectors represent what its receiver network has recently received. A state can have a valid transponder identity but no position, so it cannot be placed on the map. The broadcast callsign is not guaranteed to equal an IATA flight number, and AEROTRACE has no authoritative commercial-flight-to-transponder mapping. Therefore `AI2483`/`AIC2483` search is a callsign candidate search, not proof of a flight identity. Historical flight records do not establish a current live position. See the [OpenSky state-vector and API documentation](https://openskynetwork.github.io/opensky-api/rest.html).
+- For a commercial cross-check against Flightradar24, its official API offers live flight-position endpoints, subject to a separate subscription, endpoint limits, and its own receiver/capture gaps. Treat it as an optional paid second source, not a guaranteed complete feed; benchmark the Indian viewport and flight-number match before integrating it. See the [FR24 API overview](https://fr24api.flightradar24.com/docs/endpoints/overview) and [coverage FAQ](https://fr24api.flightradar24.com/docs/faq).
 - Position history starts when this dashboard observes an aircraft. Browser storage can be cleared, and no server-side historical archive is provided.
 - Replay advances recorded observations by selected step speed; it does not reconstruct continuous historical motion.
 - Boundary alerts are circles specified by center latitude/longitude and radius in nautical miles.
