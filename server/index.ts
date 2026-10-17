@@ -1,6 +1,6 @@
 import { exponentialBackoffMs, retryAfterSeconds } from './resilience';
 import express from 'express';
-import { parseIndiaBbox } from './india';
+import { INDIA_API_BOUNDS, indiaSearchPartitions, parseIndiaBbox, validSearchQuery } from './india';
 
 export const app = express();
 const port = Number(process.env.PORT || 3001);
@@ -35,15 +35,16 @@ async function accessToken(){
   const body=await response.json() as {access_token:string;expires_in:number};token={value:body.access_token,expires:Date.now()+body.expires_in*1000};return token.value;
 }
 
-async function request(bbox:[number,number,number,number], key:string):Promise<Snapshot>{
+async function request(bbox:[number,number,number,number]|null, key:string, icao24?:string):Promise<Snapshot>{
   const previous=cache.get(key),now=Date.now(),retry=retryState.get(key),wait=Math.max(retry?.until||0,nextGlobalRequestAt);
   if(previous&&now-Date.parse(previous.fetchedAt)<TTL)return{...previous,source:'cache',status:'ok',stale:false};
   if(wait>now){if(previous)return{...previous,source:'cache',status:'rate_limited',stale:true,nextRefreshAllowedAt:new Date(wait).toISOString()};throw Object.assign(new Error('OpenSky request cooldown'),{status:429,retryAfterSeconds:Math.ceil((wait-now)/1000)});}
   nextGlobalRequestAt=now+10_000;
-  const [south,west,north,east]=bbox;
+  const [south,west,north,east]=bbox||[0,0,0,0];
   const promise=(async()=>{
     let auth=await accessToken();
-    const url=`https://opensky-network.org/api/states/all?lamin=${south}&lomin=${west}&lamax=${north}&lomax=${east}`;
+    const params=new URLSearchParams();if(bbox){params.set('lamin',String(south));params.set('lomin',String(west));params.set('lamax',String(north));params.set('lomax',String(east));}if(icao24)params.set('icao24',icao24);
+    const url=`https://opensky-network.org/api/states/all?${params.toString()}`;
     let response=await fetch(url,{headers:auth?{Authorization:`Bearer ${auth}`}: {},signal:AbortSignal.timeout(15_000)});
     if(response.status===401&&auth){token=null;auth=await accessToken();response=await fetch(url,{headers:{Authorization:`Bearer ${auth}`},signal:AbortSignal.timeout(15_000)});}
     if(!response.ok){
@@ -55,7 +56,7 @@ async function request(bbox:[number,number,number,number], key:string):Promise<S
     }
     retryState.delete(key);
     const parsed=parseStates(await response.json());
-    const snap:Snapshot={source:'live',status:'ok',fetchedAt:new Date().toISOString(),upstreamTime:parsed.time,stale:false,nextRefreshAllowedAt:null,region:{id:key,label:'India viewport',bbox,center:[(south+north)/2,(west+east)/2],zoom:8},aircraft:parsed.aircraft};
+    const snap:Snapshot={source:'live',status:'ok',fetchedAt:new Date().toISOString(),upstreamTime:parsed.time,stale:false,nextRefreshAllowedAt:null,region:{id:key,label:icao24?'ICAO24 lookup':'India viewport',bbox:bbox||[],center:bbox?[(south+north)/2,(west+east)/2]:[],zoom:8},aircraft:parsed.aircraft};
     cache.set(key,snap);return snap;
   })();
   inflight.set(key,promise);
@@ -72,6 +73,18 @@ app.get('/api/aircraft',async(req,res)=>{
   const key=`india:${bbox.join(',')}`;
   try{res.json(await(inflight.get(key)||request(bbox,key)));}
   catch(error){const err=error as Error&{status?:number;retryAfterSeconds?:number};if(err.retryAfterSeconds)res.setHeader('Retry-After',String(err.retryAfterSeconds));res.status(err.status||502).json({source:'offline',status:err.status===429?'rate_limited':'upstream_error',error:err.message,retryAfterSeconds:err.retryAfterSeconds||null,region:{id:key,bbox},aircraft:[]});}
+});
+app.get('/api/aircraft/search',async(req,res)=>{
+  const valid=validSearchQuery(req.query.q);if(!valid)return res.status(400).json({error:'Enter a 6-character ICAO24 or a callsign with at least 3 characters.',results:[],exhaustive:false});
+  const partitions=indiaSearchPartitions();let cursor=Number(req.query.cursor??0);if(!Number.isInteger(cursor)||cursor<0||cursor>=partitions.length)cursor=0;
+  const matches=(rows:Aircraft[])=>rows.filter(a=>{const match=valid.kind==='icao24'?a.icao24.toUpperCase()===valid.query:(a.callsign||'').toUpperCase().replace(/\s+/g,'').includes(valid.query);if(!match)return false;if(valid.kind==='icao24'&&a.latitude!==null&&a.longitude!==null&&(a.latitude<INDIA_API_BOUNDS.south||a.latitude>INDIA_API_BOUNDS.north||a.longitude<INDIA_API_BOUNDS.west||a.longitude>INDIA_API_BOUNDS.east))return false;return true;});
+  const freshness=(a:Aircraft,at:string):'live'|'cached'|'stale'=>{const age=Date.now()-Date.parse(at);return age>TTL?'stale':'cached'};
+  const cachedRows=[...cache.values()].flatMap(s=>matches(s.aircraft).map(a=>({...a,freshness:freshness(a,s.fetchedAt)})));
+  const unique=(rows:typeof cachedRows)=>[...new Map(rows.sort((a,b)=>(b.timePosition??b.lastContact??0)-(a.timePosition??a.lastContact??0)).map(a=>[a.icao24,a])).values()];
+  if(valid.kind==='callsign'&&cachedRows.length&&req.query.next!=='1')return res.json({results:unique(cachedRows),query:valid.query,kind:valid.kind,source:'cache',scanned:0,totalPartitions:partitions.length,nextCursor:cursor,exhaustive:false,message:'Cached observations first. Expand one India sector at a time; results are not exhaustive.'});
+  const bbox=valid.kind==='callsign'?partitions[cursor]:null,key=valid.kind==='callsign'?`india:${partitions[cursor].join(',')}`:`icao24:${valid.query.toLowerCase()}`;
+  try{const snap=await(inflight.get(key)||request(bbox,key,valid.kind==='icao24'?valid.query.toLowerCase():undefined));const results=unique(matches(snap.aircraft).map(a=>({...a,freshness:(snap.stale?'stale':snap.source==='cache'?'cached':'live') as 'live'|'cached'|'stale'})));const next=valid.kind==='callsign'?(cursor+1<partitions.length?cursor+1:null):null;res.json({results,query:valid.query,kind:valid.kind,source:snap.source,scanned:valid.kind==='callsign'?cursor+1:1,totalPartitions:partitions.length,nextCursor:next,exhaustive:false,message:valid.kind==='callsign'?'One geographic sector checked. Expand another sector to continue; OpenSky coverage is not exhaustive.':'Current OpenSky ICAO24 observation, if available.'});}
+  catch(error){const err=error as Error&{status?:number;retryAfterSeconds?:number};if(err.retryAfterSeconds)res.setHeader('Retry-After',String(err.retryAfterSeconds));res.status(err.status||502).json({error:err.message,results:[],exhaustive:false,retryAfterSeconds:err.retryAfterSeconds||null});}
 });
 app.get('/api/health',(_req,res)=>res.json({ok:true,service:'AEROTRACE API'}));
 export default app;

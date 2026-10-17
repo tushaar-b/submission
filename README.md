@@ -33,17 +33,18 @@ The dashboard is at `http://localhost:5173`; the Express proxy listens on `http:
 - The endpoint accepts `GET /api/aircraft?bbox=south,west,north,east`. Bounds must be valid, within India, and no wider than 10° in either dimension. Invalid or overly broad queries return HTTP 400. `GET /api/health` reports proxy health.
 - Interactive CARTO Dark Matter map with CARTO and OpenStreetMap attribution, heading-rotated aircraft markers, selection, city recentering, zoom, and pan.
 - Aircraft profiles include ICAO24, callsign, country, barometric/geometric altitude, groundspeed, heading, vertical rate, ground state, position time, and data quality.
-- Callsign/ICAO search, airborne/ground and minimum-altitude filters, 60-second polling, manual refresh, and pause controls.
+- Pan-India flight discovery is independent of regional monitoring. Callsign typing checks local observations only; an explicit search checks cached server observations first and then one bounded India sector at a time. ICAO24 searches use OpenSky identifier filtering. Results show live, cached, or stale freshness and selecting a located result flies to it without changing the selected monitoring region. OpenSky coverage is partial and search results are not exhaustive. Regional filters remain scoped to the loaded monitoring viewport.
+- Airborne/ground and minimum-altitude filters, 60-second regional polling, manual refresh, and pause controls.
 - Position estimates use a great-circle destination calculation from groundspeed, track, and `time_position`. Estimates are capped at 30 seconds, visually labeled ESTIMATED, and never replace observed coordinates or trail points. Older samples are labeled STALE.
 - Local movement trails retain up to 40 observations per aircraft, at most 100 aircraft IDs, and a two-hour age window. Replay has a timestamped slider, play/pause, and 0.5×, 1×, 2× and 4× speeds. Replay is local history, not historical OpenSky data.
 - Configurable altitude and groundspeed above/below alerts, plus enter/leave alerts for a user-defined circular boundary. Settings and up to 100 alert events are stored locally; a transition fires once per state change.
 - Aircraft visibility changes are tracked within a stable viewport query only. When a new viewport query is used, the disappearance baseline resets, so panning does not incorrectly report aircraft as having left. “No longer reported” does not mean confirmed departure or landing.
 - Last successful viewport snapshots are saved locally for offline browsing. Live, cached, offline, rate-limited, demo and replay states are distinct; demo records are labeled simulated.
-- Markers are memoized, filtered to the visible viewport, and grouped into clickable clusters below zoom 10. Prediction refreshes every five seconds without recreating the Leaflet map.
+- Every valid aircraft is rendered as its own memoized, heading-rotated airplane marker at its true coordinates. Markers are filtered to the visible viewport; overlapping icons rise on hover and selected markers rise above nearby markers. No marker clustering or coordinate offsets are used. Prediction refreshes every five seconds without recreating the Leaflet map.
 
 ## API and recovery behavior
 
-The Express proxy and Vercel Node function share the same implementation. Successful snapshots and in-flight requests are cached/deduplicated by the normalized viewport bbox for 60 seconds. Uncached upstream calls have a global minimum 10-second gap per process; OpenSky `Retry-After` / rate-limit headers are honored and transient failures use exponential backoff up to five minutes. A prior successful snapshot for that viewport is returned with a degraded status when possible. Serverless instances can have separate memory and cold starts, so process-local caching is best effort, not a global quota guarantee.
+The Express proxy and Vercel Node function share the same implementation. Regional snapshots and in-flight requests are cached/deduplicated by the normalized viewport bbox for 60 seconds. Nationwide callsign search checks those cached observations first, then allows one explicitly requested geographic partition per search action (36 bounded partitions cover approximate India); results state how many sectors were checked and never claim exhaustive coverage. ICAO24 lookup asks OpenSky for the identifier directly. Uncached upstream calls have a global minimum 10-second gap per process; OpenSky `Retry-After` / rate-limit headers are honored and transient failures use exponential backoff up to five minutes. A prior successful snapshot for that viewport is returned with a degraded status when possible. Serverless instances can have separate memory and cold starts, so process-local caching is best effort, not a global quota guarantee.
 
 ## Checks
 
@@ -53,7 +54,7 @@ npm test
 npm run lint
 ```
 
-Tests cover filters, trails, India viewport clipping/zoom eligibility, geodesic prediction and its cap, replay stepping, alerts, status labeling, history pruning, retry headers, and exponential backoff.
+Tests cover filters, trails, India viewport clipping/zoom eligibility, search normalization, freshness/error parsing, bounded search partitions, individual overlapping markers at actual coordinates, geodesic prediction and its cap, replay stepping, alerts, status labeling, history pruning, retry headers, and exponential backoff.
 
 ## Deploy to Vercel
 
@@ -71,7 +72,7 @@ The project includes `vercel.json` and serverless Express handlers at `api/aircr
 
 ## Known limits
 
-- OpenSky coverage, anonymous quota, availability, and refresh rate are controlled upstream. Broad India-wide scans are avoided; zoom into a smaller viewport to fetch live data.
+- OpenSky coverage, anonymous quota, availability, and refresh rate are controlled upstream. Callsign discovery checks one partition per explicit action and can miss aircraft until more sectors are searched; OpenSky does not provide an exhaustive India-wide callsign index. Exact ICAO24 searches are also limited to OpenSky current-state availability.
 - Position history starts when this dashboard observes an aircraft. Browser storage can be cleared, and no server-side historical archive is provided.
 - Replay advances recorded observations by selected step speed; it does not reconstruct continuous historical motion.
 - Boundary alerts are circles specified by center latitude/longitude and radius in nautical miles.
