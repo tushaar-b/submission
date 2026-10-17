@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.server.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": ".vercel-build",
+    "rootDir": "."
+  },
+  "include": [
+    "api/**/*.ts",
+    "server/index.ts",
+    "server/india.ts",
+    "server/resilience.ts",
+    "server/states.ts"
+  ]
+}

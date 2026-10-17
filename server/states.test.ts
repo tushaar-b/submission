@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {parseStates,type StateNormalizationDiagnostics} from './states';
+import {parseStates,type StateNormalizationDiagnostics} from './states.js';
 
 const row=(icao24:string,longitude:unknown,latitude:unknown)=>[icao24,'AIC2483','India',1_700_000_000,1_700_000_000,longitude,latitude,10_000,false,220,90,0,null,10_100,null,false,0,null];
 

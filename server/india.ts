@@ -14,3 +14,9 @@ export function parseIndiaBbox(value:unknown):IndiaBbox|null{
   if(south<INDIA_API_BOUNDS.south||west<INDIA_API_BOUNDS.west||north>INDIA_API_BOUNDS.north||east>INDIA_API_BOUNDS.east||south>=north||west>=east||north-south>10||east-west>10)return null;
   return[south,west,north,east];
 }
+export function parseIndiaBboxQuery(query:{bbox?:unknown;lamin?:unknown;lomin?:unknown;lamax?:unknown;lomax?:unknown}):IndiaBbox|null{
+  if(typeof query.bbox==='string')return parseIndiaBbox(query.bbox);
+  const bounds=[query.lamin,query.lomin,query.lamax,query.lomax];
+  if(bounds.some(value=>typeof value!=='string'||value.trim()===''))return null;
+  return parseIndiaBbox(bounds.join(','));
+}

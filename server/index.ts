@@ -1,7 +1,7 @@
-import { exponentialBackoffMs, retryAfterSeconds } from './resilience';
+import { exponentialBackoffMs, retryAfterSeconds } from './resilience.js';
 import express from 'express';
-import { INDIA_API_BOUNDS, callsignSearchVariants, indiaSearchPartitions, parseIndiaBbox, validSearchQuery } from './india';
-import { parseStates, type Aircraft } from './states';
+import { INDIA_API_BOUNDS, callsignSearchVariants, indiaSearchPartitions, parseIndiaBboxQuery, validSearchQuery } from './india.js';
+import { parseStates, type Aircraft } from './states.js';
 
 export const app = express();
 const port = Number(process.env.PORT || 3001);
@@ -59,7 +59,7 @@ async function request(bbox:[number,number,number,number]|null, key:string, icao
 }
 
 app.get('/api/aircraft',async(req,res)=>{
-  const bbox=parseIndiaBbox(req.query.bbox);
+  const bbox=parseIndiaBboxQuery(req.query);
   if(!bbox)return res.status(400).json({source:'offline',status:'invalid_request',error:'Provide a valid, sufficiently zoomed India viewport bbox=south,west,north,east',retryAfterSeconds:null,region:null,aircraft:[]});
   const key=`india:${bbox.join(',')}`;
   try{const pending=inflight.get(key);if(pending)diagnosticLog('request_deduplicated',{key});const snapshot=await(pending||request(bbox,key));diagnosticLog('snapshot_returned',{key,source:snapshot.source,status:snapshot.status,stale:snapshot.stale,returned:snapshot.aircraft.length});res.json(snapshot);}

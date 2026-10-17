@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { callsignSearchVariants, indiaSearchPartitions, parseIndiaBbox, validSearchQuery } from './india';
+import { callsignSearchVariants, indiaSearchPartitions, parseIndiaBbox, parseIndiaBboxQuery, validSearchQuery } from './india.js';
 
 describe('India discovery partitioning', () => {
   it('covers India with bounded cells suitable for deliberate searches', () => {
@@ -19,6 +19,9 @@ describe('India discovery partitioning', () => {
   });
   it('keeps regional bbox validation separate from search cells', () => {
     expect(parseIndiaBbox('27,76,29,79')).toEqual([27,76,29,79]);
+    expect(parseIndiaBboxQuery({lamin:'27',lomin:'76',lamax:'29',lomax:'79'})).toEqual([27,76,29,79]);
+    expect(parseIndiaBboxQuery({bbox:'27,76,29,79'})).toEqual([27,76,29,79]);
+    expect(parseIndiaBboxQuery({lamin:'29',lomin:'76',lamax:'27',lomax:'79'})).toBeNull();
     expect(parseIndiaBbox('0,0,80,90')).toBeNull();
   });
 });

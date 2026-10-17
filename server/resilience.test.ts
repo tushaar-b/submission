@@ -1,2 +1,2 @@
-import{describe,it,expect}from'vitest';import{exponentialBackoffMs,retryAfterSeconds}from'./resilience';
+import{describe,it,expect}from'vitest';import{exponentialBackoffMs,retryAfterSeconds}from'./resilience.js';
 describe('upstream recovery timing',()=>{it('honors the OpenSky retry header before Retry-After',()=>{expect(retryAfterSeconds('120','30')).toBe(120);expect(retryAfterSeconds(null,'30')).toBe(30)});it('parses HTTP-date Retry-After values',()=>{const now=1_000_000;expect(retryAfterSeconds(null,new Date(now+45_000).toUTCString(),now)).toBe(45)});it('doubles transient failure backoff and caps it',()=>{expect(exponentialBackoffMs(1)).toBe(15_000);expect(exponentialBackoffMs(2)).toBe(30_000);expect(exponentialBackoffMs(20)).toBe(300_000)})});
