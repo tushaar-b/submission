@@ -31,7 +31,8 @@ async function request(bbox:[number,number,number,number]|null, key:string, icao
     const params=new URLSearchParams();if(bbox){params.set('lamin',String(south));params.set('lomin',String(west));params.set('lamax',String(north));params.set('lomax',String(east));}if(icao24)params.set('icao24',icao24);
     const url=`https://opensky-network.org/api/states/all?${params.toString()}`;
     let response=await openskyAuth.fetchWithAuth(url,{signal:AbortSignal.timeout(15_000)});
-    diagnosticLog('upstream_response',{key,status:response.status,httpDate:response.headers.get('date'),retryAfter:response.headers.get('retry-after'),rateLimitRemaining:response.headers.get('x-rate-limit-remaining')});
+    const responseCategory=response.status===429?'http_429':response.status===401?'http_401':response.status===403?'http_403':response.ok?'success':'http_error';
+    diagnosticLog('upstream_response',{key,status:response.status,category:responseCategory,httpDate:response.headers.get('date'),retryAfter:response.headers.get('retry-after'),rateLimitRemaining:response.headers.get('x-rate-limit-remaining')});
     if(!response.ok){
       const delay=retryAfterSeconds(response.headers.get('x-rate-limit-retry-after-seconds'),response.headers.get('retry-after'));
       const count=(retryState.get(key)?.count||0)+1,backoff=response.status===429?delay:exponentialBackoffMs(count);

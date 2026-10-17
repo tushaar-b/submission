@@ -27,6 +27,37 @@ type AuthOptions = {
 
 type CachedToken = { value: string; refreshAt: number };
 
+/** Classify only transport metadata; never include request URLs, headers, or bodies. */
+export function classifyOpenSkyTransportError(error: unknown): string {
+  const chain: unknown[] = [];
+  let current = error;
+  for (let depth = 0; current && depth < 5; depth += 1) {
+    chain.push(current);
+    current = current instanceof Error ? current.cause : undefined;
+  }
+  const names = chain.map((item) => item instanceof Error ? item.name : '');
+  const codes = chain.map((item) => item && typeof item === 'object' && 'code' in item
+    ? String((item as { code: unknown }).code).toUpperCase()
+    : '');
+  if (names.some((name) => name === 'AbortError' || name === 'TimeoutError')) return 'abort_timeout';
+  if (codes.some((code) => /^(ENOTFOUND|EAI_AGAIN|EAI_FAIL|EAI_NODATA)$/.test(code))) return 'dns_resolution_failure';
+  if (codes.some((code) => /^(UND_ERR_CONNECT_TIMEOUT|ETIMEDOUT|ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENETUNREACH)$/.test(code))) return 'tcp_connection_failure';
+  if (codes.some((code) => /^(ERR_TLS_.*|CERT_.*|UNABLE_TO_VERIFY_LEAF_SIGNATURE|DEPTH_ZERO_SELF_SIGNED_CERT)$/.test(code)) ||
+      names.some((name) => name.toLowerCase().includes('tls'))) return 'tls_handshake_failure';
+  return 'transport_failure';
+}
+
+function transportDetails(error: unknown) {
+  let cause: unknown = error;
+  for (let depth = 0; depth < 4 && cause instanceof Error && cause.cause; depth += 1) cause = cause.cause;
+  const code = cause && typeof cause === 'object' && 'code' in cause ? (cause as { code: unknown }).code : undefined;
+  return {
+    category: classifyOpenSkyTransportError(error),
+    errorName: error instanceof Error ? error.name : 'UnknownError',
+    causeCode: typeof code === 'string' ? code : null,
+  };
+}
+
 export function createOpenSkyAuthenticator(options: AuthOptions = {}) {
   const fetchImpl = options.fetchImpl ?? fetch;
   const getCredentials = options.getCredentials ?? (() => ({
@@ -77,18 +108,15 @@ export function createOpenSkyAuthenticator(options: AuthOptions = {}) {
         signal: AbortSignal.timeout(8_000),
       });
     } catch (error) {
-      const causeCode = error instanceof Error && 'cause' in error
-        ? (error.cause as { code?: unknown } | undefined)?.code
-        : undefined;
-      diagnostic('token_transport_failure', {
-        errorName: error instanceof Error ? error.name : 'UnknownError',
-        causeCode: typeof causeCode === 'string' ? causeCode : null,
-      });
+      const details = transportDetails(error);
+      diagnostic('token_transport_failure', details);
+      const causeCode = details.causeCode;
       const detail = typeof causeCode === 'string' ? ` (${causeCode})` : '';
       throw new OpenSkyAuthError('token_transport', `OpenSky OAuth token endpoint could not be reached${detail}.`, { cause: error });
     }
     if (!response.ok) {
-      diagnostic('token_http_failure', { status: response.status });
+      const category = response.status === 401 ? 'http_401' : response.status === 403 ? 'http_403' : response.status === 429 ? 'http_429' : 'http_error';
+      diagnostic('token_http_failure', { status: response.status, category });
       const limited = response.status === 429;
       const retry = limited
         ? retryAfterSeconds(response.headers.get('x-rate-limit-retry-after-seconds'), response.headers.get('retry-after'))
@@ -115,7 +143,7 @@ export function createOpenSkyAuthenticator(options: AuthOptions = {}) {
     const lifetimeMs = tokenBody.expires_in * 1_000;
     const refreshSkewMs = Math.min(30_000, lifetimeMs * 0.1);
     cachedToken = { value: tokenBody.access_token, refreshAt: now() + lifetimeMs - refreshSkewMs };
-    diagnostic('token_acquired', { mode: 'oauth2', expiresInSeconds: tokenBody.expires_in });
+    diagnostic('token_acquired', { mode: 'oauth2', category: 'token_success', expiresInSeconds: tokenBody.expires_in });
     return cachedToken.value;
   }
 
@@ -160,13 +188,9 @@ export function createOpenSkyAuthenticator(options: AuthOptions = {}) {
     try {
       response = await send(token);
     } catch (error) {
-      const causeCode = error instanceof Error && 'cause' in error
-        ? (error.cause as { code?: unknown } | undefined)?.code
-        : undefined;
-      diagnostic('states_transport_failure', {
-        errorName: error instanceof Error ? error.name : 'UnknownError',
-        causeCode: typeof causeCode === 'string' ? causeCode : null,
-      });
+      const details = transportDetails(error);
+      diagnostic('states_transport_failure', details);
+      const causeCode = details.causeCode;
       const detail = typeof causeCode === 'string' ? ` (${causeCode})` : '';
       throw new OpenSkyAuthError('states_transport', `OpenSky states request could not connect to the upstream service${detail}.`, { cause: error });
     }
@@ -177,13 +201,9 @@ export function createOpenSkyAuthenticator(options: AuthOptions = {}) {
     try {
       return await send(refreshedToken);
     } catch (error) {
-      const causeCode = error instanceof Error && 'cause' in error
-        ? (error.cause as { code?: unknown } | undefined)?.code
-        : undefined;
-      diagnostic('states_transport_failure', {
-        errorName: error instanceof Error ? error.name : 'UnknownError',
-        causeCode: typeof causeCode === 'string' ? causeCode : null,
-      });
+      const details = transportDetails(error);
+      diagnostic('states_transport_failure', details);
+      const causeCode = details.causeCode;
       const detail = typeof causeCode === 'string' ? ` (${causeCode})` : '';
       throw new OpenSkyAuthError('states_transport', `OpenSky states retry could not connect to the upstream service${detail}.`, { cause: error });
     }
