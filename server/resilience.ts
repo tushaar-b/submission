@@ -1,0 +1,2 @@
+export function retryAfterSeconds(rateLimitHeader:string|null,retryAfterHeader:string|null,now=Date.now()){const raw=rateLimitHeader||retryAfterHeader;if(!raw)return 60;const seconds=Number(raw);if(Number.isFinite(seconds)&&seconds>0)return seconds;const date=Date.parse(raw);return Number.isFinite(date)?Math.max(1,Math.ceil((date-now)/1000)):60;}
+export function exponentialBackoffMs(attempt:number,baseMs=15_000,maxMs=300_000){return Math.min(maxMs,baseMs*2**Math.max(0,attempt-1));}
