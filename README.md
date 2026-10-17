@@ -28,7 +28,7 @@ The landing page is at `http://localhost:5173/` and the dashboard is at `http://
 
 ## Features
 
-- A cinematic landing page at `/` uses the supplied golden-hour takeoff footage. Scroll pins the hero for roughly 350vh and scrubs the muted video forward or backward; the source is preserved at `public/aerotrace-takeoff-original.mp4`, alongside a seek-optimized browser copy and opening-frame poster. The baked-in ending remains unobstructed. Reduced-motion preferences use the static poster. Launch Radar and Enter Live Radar open `/dashboard`.
+- A cinematic landing page at `/` uses the supplied screen recording of the golden-hour takeoff. Scroll pins the hero for roughly 350vh and scrubs the muted video forward or backward with Lenis inertia and a short GSAP scrub ease; the source remains preserved at `public/aerotrace-takeoff-original.mov`, alongside an optimized H.264 MP4 and opening-frame poster. The baked-in ending remains unobstructed. Reduced-motion preferences use the static poster. Launch Radar and Enter Live Radar open `/dashboard`.
 - The existing three-column aircraft dashboard is available at `/dashboard` and retains its CARTO Dark Matter map and live tracking tools.
 
 - The map opens over Delhi, and its current Leaflet viewport is the single source of bounds for live monitoring. Pan or zoom freely; after a 700 ms quiet period the dashboard requests aircraft within the visible bounds, clipped to India's approximate 6.4–35.7° N and 68.1–97.5° E coverage envelope. Bounds are rounded outward to quarter-degree cache cells so visible edge aircraft are not omitted. Views outside India, zoomed out below level 6, wider than 10 degrees, or above the bounded query area display a zoom-in prompt instead of requesting an overly broad OpenSky query.

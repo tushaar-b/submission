@@ -46,23 +46,20 @@ export default function LandingPage() {
     video?.addEventListener('loadedmetadata', onMetadata);
     video?.addEventListener('durationchange', onMetadata);
 
-    const lenis = new Lenis({ lerp: 0.085, smoothWheel: true, syncTouch: false });
+    const lenis = new Lenis({ lerp: 0.07, smoothWheel: true, syncTouch: false });
     const syncScroll = () => ScrollTrigger.update();
     lenis.on('scroll', syncScroll);
     const ticker = (time: number) => lenis.raf(time * 1000);
     gsap.ticker.add(ticker);
     gsap.ticker.lagSmoothing(0);
 
-    const trigger = ScrollTrigger.create({
-      trigger: hero,
-      start: 'top top',
-      end: '+=350%',
-      pin: true,
-      scrub: true,
-      anticipatePin: 1,
-      invalidateOnRefresh: true,
-      onUpdate: (self) => {
-        progress = self.progress;
+    // A short numeric scrub lets video time ease into wheel/touch scroll changes.
+    const playhead = { progress: 0 };
+    const scrubTween = gsap.to(playhead, {
+      progress: 1,
+      ease: 'none',
+      onUpdate: () => {
+        progress = playhead.progress;
         if (!raf) raf = window.requestAnimationFrame(seek);
         const hidden = shouldHideHeroInterface(progress);
         if (hidden !== lastUiHidden && heroUi) {
@@ -70,13 +67,23 @@ export default function LandingPage() {
           gsap.to(heroUi, { autoAlpha: hidden ? 0 : 1, duration: 0.22, overwrite: true });
         }
       },
+      scrollTrigger: {
+        trigger: hero,
+        start: 'top top',
+        end: '+=350%',
+        pin: true,
+        scrub: 0.32,
+        anticipatePin: 1,
+        invalidateOnRefresh: true,
+      },
     });
     if (video?.readyState && video.readyState >= HTMLMediaElement.HAVE_METADATA) seek();
     ScrollTrigger.refresh();
 
     return () => {
       if (raf) window.cancelAnimationFrame(raf);
-      trigger.kill();
+      scrubTween.scrollTrigger?.kill();
+      scrubTween.kill();
       lenis.off('scroll', syncScroll);
       lenis.destroy();
       gsap.ticker.remove(ticker);
