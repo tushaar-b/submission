@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: aerotrace-api
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci && npm run build:server
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: OPENSKY_CLIENT_ID
+        sync: false
+      - key: OPENSKY_CLIENT_SECRET
+        sync: false
+      - key: AEROTRACE_DIAGNOSTICS
+        value: "1"

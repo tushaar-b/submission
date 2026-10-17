@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.server.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist-server",
+    "rootDir": "."
+  },
+  "include": [
+    "server/index.ts",
+    "server/india.ts",
+    "server/resilience.ts",
+    "server/opensky-auth.ts",
+    "server/states.ts"
+  ]
+}

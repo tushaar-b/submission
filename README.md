@@ -34,7 +34,7 @@ The landing page is at `http://localhost:5173/` and the dashboard is at `http://
 | `VITE_CARTO_API_KEY` | Vite build and browser | Publishable CARTO raster tile key, embedded into tile URLs. Configure it in Vercel before building. |
 | `OPENSKY_CLIENT_ID` | Express / Vercel function | Optional OpenSky OAuth2 client ID; server only. |
 | `OPENSKY_CLIENT_SECRET` | Express / Vercel function | Optional OpenSky OAuth2 client secret; server only and never use a `VITE_` prefix. |
-| `PORT` | Local Express server | Local API port; defaults to `3001`. Vercel assigns its own port. |
+| `PORT` | Express / Render | Listening port; defaults to `3001` locally. Render supplies this value in production. |
 
 `.env` is ignored by Git. The CARTO key is a browser-visible tile key; protect OpenSky credentials as server secrets.
 
@@ -62,7 +62,7 @@ The Express proxy and Vercel Node function share the same implementation. Active
 
 ### Development diagnostics
 
-Set `AEROTRACE_DIAGNOSTICS=1` in the server environment and `VITE_AEROTRACE_DIAGNOSTICS=true` in the browser environment, then restart both development processes. Server logs report upstream status, cache/deduplication, raw versus normalized OpenSky state counts, and coordinate validity. The browser console reports current viewport bounds and counts that are outside the viewport, missing coordinates, rejected by filters, eligible, and rendered. These diagnostics intentionally omit API credentials, callsigns, and aircraft identifiers. Leave both flags disabled in normal production operation.
+Set `AEROTRACE_DIAGNOSTICS=1` in the server environment and `VITE_AEROTRACE_DIAGNOSTICS=true` in the browser environment, then restart both development processes. Expanded server logs report upstream status, cache/deduplication, raw versus normalized OpenSky state counts, and coordinate validity. The browser console reports current viewport bounds and counts that are outside the viewport, missing coordinates, rejected by filters, eligible, and rendered. Authentication and transport outcomes are always logged server-side using safe categories, HTTP statuses, error names, and transport codes; credentials and tokens are never included. Browser diagnostics intentionally omit callsigns and aircraft identifiers.
 
 ## Checks
 
@@ -86,6 +86,12 @@ The production site is hosted at [https://submission-tan.vercel.app/](https://su
 6. For deployment verification, open the production URL and check the CARTO Dark Matter tiles and attribution, then pan or zoom to another compact Indian viewport and observe whether aircraft update after the 700 ms debounce.
 7. Check `/api/health` for `{ "ok": true, "service": "AEROTRACE API" }` and `/api/aircraft?bbox=27,76,29,79` for a JSON response. OpenSky may return live data or a clearly labeled cached/degraded status when temporarily unavailable. An outside-India or invalid bbox should return HTTP 400.
 8. In browser developer tools, inspect that API requests use the deployed host and CARTO raster requests include the configured `key` query parameter. The frontend uses relative `/api` paths and does not target localhost in production.
+
+## Evaluate a Render API backend
+
+The repository includes `render.yaml` and a separate compiled Node entrypoint for testing OpenSky connectivity outside Vercel. The blueprint builds only the Express API (`npm ci && npm run build:server`) and starts it with `npm start`. The server binds to `0.0.0.0:$PORT`; it does not serve or rebuild the frontend. To create the service, open Render, choose **New → Blueprint**, connect `tushaar-b/submission` on `main`, and select this repository's `render.yaml`. Add `OPENSKY_CLIENT_ID` and `OPENSKY_CLIENT_SECRET` as service secrets when prompted. Render provides `PORT`; do not set it manually. The blueprint enables sanitized server connection diagnostics.
+
+After Render reports the service as live, verify `https://<render-service>.onrender.com/api/health` and `https://<render-service>.onrender.com/api/aircraft?lamin=27&lomin=76&lamax=29&lomax=79`. Confirm the aircraft response says `source: "live"`, then inspect Render logs for `token_acquired` and a successful `upstream_response`. The Vercel frontend is not proxied to Render by this configuration. Only add a Vercel API rewrite after those checks pass; leave the current frontend routing intact otherwise.
 
 ## Known limits
 

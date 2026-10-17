@@ -7,6 +7,8 @@
     "dev": "concurrently -k \"npm:server\" \"npm:vite\"",
     "vite": "vite --host 0.0.0.0",
     "server": "tsx watch server/index.ts",
+    "build:server": "tsc -p tsconfig.server.build.json",
+    "start": "node dist-server/server/index.js",
     "build": "tsc -p tsconfig.app.json && tsc -p tsconfig.server.json && npm run check:serverless && vite build",
     "check:serverless": "tsc -p tsconfig.serverless.json && node scripts/check-serverless-imports.mjs",
     "test": "vitest run",

@@ -82,4 +82,4 @@ app.get('/api/aircraft/search',async(req,res)=>{
 });
 app.get('/api/health',(_req,res)=>res.json({ok:true,service:'AEROTRACE API'}));
 export default app;
-if(process.env.VERCEL!=='1')app.listen(port,()=>console.log(`AEROTRACE API listening on ${port}`));
+if(process.env.VERCEL!=='1')app.listen(port,'0.0.0.0',()=>console.log(`AEROTRACE API listening on 0.0.0.0:${port}`));
