@@ -11,7 +11,11 @@ const inflight = new Map<string, Promise<Snapshot>>();
 const retryState = new Map<string, { count: number; until: number }>();
 const TTL = 60_000;
 let nextGlobalRequestAt = 0;
-function diagnosticLog(stage:string,details:Record<string,unknown>){if(process.env.AEROTRACE_DIAGNOSTICS==='1')console.info(`[AEROTRACE diagnostics] ${stage} ${JSON.stringify(details)}`);}
+function diagnosticLog(stage:string,details:Record<string,unknown>){
+  const alwaysSafe=['token_transport_failure','token_http_failure','token_acquired','states_transport_failure'].includes(stage)||
+    (stage==='upstream_response'&&details.status!==200);
+  if(alwaysSafe||process.env.AEROTRACE_DIAGNOSTICS==='1')console.info(`[AEROTRACE diagnostics] ${stage} ${JSON.stringify(details)}`);
+}
 const openskyAuth=createOpenSkyAuthenticator({onDiagnostic:(stage,details)=>diagnosticLog(stage,details)});
 function errorType(error:unknown):string{
   if(error instanceof OpenSkyAuthError)return error.kind.startsWith('token_')||error.kind==='credentials'?'authentication_error':'transport_error';
